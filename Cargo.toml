@@ -5,3 +5,7 @@ edition = "2024"
 
 [dependencies]
 rusqlite = { version = "0.43.0", features = ["bundled"] }
+
+[workspace]
+members = ["crates/datenbank", "crates/db-admin"]
+
