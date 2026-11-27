@@ -1,3 +1,6 @@
+mod data;
+mod game;
+
 use axum::{Router, response::Json, routing::get};
 use serde::Serialize;
 use std::path::Path;
