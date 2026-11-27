@@ -1,18 +1,14 @@
-use axum::{
-    Router,
-    response::{Html, IntoResponse, Json},
-    routing::get,
-};
+use axum::{Router, response::Json, routing::get};
 use serde::Serialize;
 use std::path::Path;
-use tower_http::services::{ServeDir, ServeFile};
+use tower_http::services::ServeDir;
 
 #[tokio::main]
 async fn main() {
     //routing to example index.html file
     let app = Router::new()
         .route("/api/example", get(example_api_route))
-        //pictures can be accessed in html by using pictures/"name"
+        //pictures can be accessed in html by using /pictures/"name"
         .nest_service("/pictures", ServeDir::new("data/photos"))
         .fallback_service(ServeDir::new(require_client_dir()));
 
@@ -25,7 +21,10 @@ async fn main() {
 fn require_client_dir() -> &'static Path {
     let path = Path::new("client/");
     if !path.is_dir() {
-        panic!("client directory does not exist, cannot display website")
+        panic!(
+            "client directory {} does not exist, cannot display website",
+            path.display()
+        )
     }
     path
 }
@@ -44,8 +43,7 @@ struct Round {
     image_path: String,
 }
 
-async fn start_round() -> impl IntoResponse {}
+//need to create these next week
+//async fn start_round() -> impl IntoResponse {}
 
-async fn submit_guess() -> impl IntoResponse {}
-
-async fn calculate_score() -> impl IntoResponse {}
+//async fn submit_guess() -> impl IntoResponse {}
