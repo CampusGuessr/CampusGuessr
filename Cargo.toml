@@ -11,5 +11,5 @@ tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread"] }
 tower-http = { version = "0.7.1", features = ["fs"] }
 
 [[bin]]
-name = "campusguessr"
+name = "server"
 path = "server/src/main.rs"
