@@ -1,4 +1,4 @@
-use crate::data::{LatLng};
+use crate::data::LatLng;
 
 // Approximations for conversion; gathered from Google Earth in Munich
 const METERS_PER_DEGREE_LAT: f64 = 114527.0;
@@ -19,12 +19,11 @@ pub fn evaluate_guess(real_coords: LatLng, guessed_coords: LatLng) -> GuessResul
 
     GuessResults {
         distance_in_meters,
-        points
+        points,
     }
 }
 
 fn calculate_distance_in_meters(real_coords: LatLng, guessed_coords: LatLng) -> f64 {
-
     let distance_lat = (real_coords.lat - guessed_coords.lat) * METERS_PER_DEGREE_LAT;
     let distance_lng = (real_coords.lng - guessed_coords.lng) * METERS_PER_DEGREE_LNG;
 
@@ -36,7 +35,7 @@ fn calculate_distance_in_meters(real_coords: LatLng, guessed_coords: LatLng) -> 
 fn calculate_points(distance_in_meters: f64) -> usize {
     match distance_in_meters {
         0.0..MAX_POINTS_DISTANCE => MAX_POINTS,
-        _ => point_curve(distance_in_meters - MAX_POINTS_DISTANCE)
+        _ => point_curve(distance_in_meters - MAX_POINTS_DISTANCE),
     }
 }
 
@@ -56,35 +55,33 @@ mod test {
     fn test_distance_calculation() {
         let point_a = LatLng {
             lat: 48.148547,
-            lng: 11.58615
+            lng: 11.58615,
         };
         let point_b = LatLng {
             lat: 48.148553,
-            lng: 11.586172
+            lng: 11.586172,
         };
         let a_to_b = 1.73;
 
         let point_c = LatLng {
             lat: 48.151206,
-            lng: 11.579219
+            lng: 11.579219,
         };
         let point_d = LatLng {
             lat: 48.151061,
-            lng: 11.579125
+            lng: 11.579125,
         };
         let c_to_d = 17.0;
 
         let point_e = LatLng {
             lat: 48.149953,
-            lng: 11.594317
+            lng: 11.594317,
         };
         let point_f = LatLng {
             lat: 48.132158,
-            lng: 11.668464
+            lng: 11.668464,
         };
         let e_to_f = 5862.0;
-
-
 
         assert!((calculate_distance_in_meters(point_a, point_b) - a_to_b).abs() < a_to_b * 0.1);
         assert!((calculate_distance_in_meters(point_c, point_d) - c_to_d).abs() < c_to_d * 0.1);
@@ -99,13 +96,15 @@ mod test {
         dbg!(just_within_max_dist);
         let just_outside_max_dist = calculate_points(MAX_POINTS_DISTANCE * 1.01);
         dbg!(just_outside_max_dist);
-        let well_outside_max_dist = calculate_points(MAX_POINTS_DISTANCE + ((MAX_POINTS_DISTANCE + ZERO_POINTS_DISTANCE) / 2.0));
+        let well_outside_max_dist = calculate_points(
+            MAX_POINTS_DISTANCE + ((MAX_POINTS_DISTANCE + ZERO_POINTS_DISTANCE) / 2.0),
+        );
         dbg!(well_outside_max_dist);
         let just_within_zero_dist = calculate_points(ZERO_POINTS_DISTANCE * 0.99);
         dbg!(just_within_zero_dist);
-        let just_outside_zero_dist = calculate_points(ZERO_POINTS_DISTANCE * 1.01 );
+        let just_outside_zero_dist = calculate_points(ZERO_POINTS_DISTANCE * 1.01);
         dbg!(just_outside_zero_dist);
-        let well_outside_zero_dist = calculate_points(ZERO_POINTS_DISTANCE * 2.0 );
+        let well_outside_zero_dist = calculate_points(ZERO_POINTS_DISTANCE * 2.0);
         dbg!(well_outside_zero_dist);
 
         assert!(well_within_max_dist == MAX_POINTS);
