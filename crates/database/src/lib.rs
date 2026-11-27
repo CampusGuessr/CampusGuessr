@@ -5,8 +5,9 @@ pub fn create_table(conn: &Connection) -> Result<()> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS files (
                   id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  name TEXT NOT NULL,
-                  coordinates TEXT NOT NULL 
+                  file_name TEXT NOT NULL UNIQUE CHECK (length(file_name) > 0 AND instr(file_name, '/') = 0 AND instr(file_name, '\\') = 0),
+                  latitude  REAL NOT NULL CHECK (latitude BETWEEN -90 AND 90),
+                  longitude REAL NOT NULL CHECK (longitude BETWEEN -180 AND 180)
                   )",
         [],
     )?;
@@ -27,20 +28,21 @@ pub fn init_database(path: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn insert_file(conn: &Connection, name: &str, coordinates: &str) -> Result<i64> {
+pub fn insert_file(conn: &Connection, file_name: &str, latitude: f64, longitude: f64) -> Result<i64> {
     conn.execute(
-        "INSERT INTO files (name, coordinates) VALUES (?1, ?2)",
-        params![name, coordinates],
+        "INSERT INTO files (file_name, latitude, longitude) VALUES (?1, ?2, ?3)",
+        params![file_name, latitude, longitude],
     )?;
     Ok(conn.last_insert_rowid())
 }
 
-pub fn get_file_by_id(conn: &Connection, id: i64) -> Result<(String, String)> {
-    let mut stmt = conn.prepare("SELECT name, coordinates FROM files WHERE id = ?1")?;
+pub fn get_file_by_id(conn: &Connection, id: i64) -> Result<(String, f64, f64)> {
+    let mut stmt = conn.prepare("SELECT file_name, latitude, longitude FROM files WHERE id = ?1")?;
     stmt.query_row(params![id], |row: &Row| {
-        let name: String = row.get(0)?;
-        let coordinates: String = row.get(1)?;
-        Ok((name, coordinates))
+        let file_name: String = row.get(0)?;
+        let latitude: f64 = row.get(1)?;
+        let longitude: f64 = row.get(2)?;
+        Ok((file_name, latitude, longitude))
     })
 }
 
@@ -66,6 +68,20 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
         create_table(&conn).unwrap();
         conn
+    }
+    fn try_insert(
+        conn: &Connection,
+        file_name: &str,
+        latitude: f64,
+        longitude: f64,
+    ) -> Result<usize> {
+        conn.execute(
+            "INSERT INTO files (file_name, latitude, longitude) VALUES (?1, ?2, ?3)",
+            params![file_name, latitude, longitude],
+        )
+    }
+    fn is_constraint_violation<T>(result: &Result<T>) -> bool {
+        matches!(result, Err(rusqlite::Error::SqliteFailure(e, _)) if e.code == rusqlite::ErrorCode::ConstraintViolation)
     }
     #[test]
     fn create_table_can_run_twice() {
@@ -118,24 +134,25 @@ mod tests {
     #[test]
     fn insert_returns_new_id() {
         let conn = memory_db();
-        let new_id1 = insert_file(&conn, "test_file.txt", "0,0").unwrap();
+        let new_id1 = insert_file(&conn, "test_file.txt",  0.0,  1.1).unwrap();
         assert_eq!(new_id1, 1);
-        let new_id2 = insert_file(&conn, "test_file2.txt", "1,1").unwrap();
+        let new_id2 = insert_file(&conn, "test_file2.txt", 2.2, 3.3).unwrap();
         assert_eq!(new_id2, 2);
     }
     #[test]
     fn insert_and_read_back() {
         let conn = memory_db();
-        let id = insert_file(&conn, "test_file.txt", "0,0").unwrap();
-        let (name, coordinates) = get_file_by_id(&conn, id).unwrap();
-        assert_eq!(name, "test_file.txt");
-        assert_eq!(coordinates, "0,0");
+        let id = insert_file(&conn, "test.txt",0.0, 1.1).unwrap();
+        let (file_name, latitude, longitude) = get_file_by_id(&conn, id).unwrap();
+        assert_eq!(file_name, "test.txt");
+        assert_eq!(latitude, 0.0);
+        assert_eq!(longitude, 1.1)
     }
 
     #[test]
     fn get_unknown_id_returns_no_rows_error() {
         let conn = memory_db();
-        let id = insert_file(&conn, "test_file.txt", "0,0").unwrap();
+        let id = insert_file(&conn, "test_file.txt", 0.0, 1.1).unwrap();
         let result = get_file_by_id(&conn, id + 1);
         assert!(
             matches!(result, Err(rusqlite::Error::QueryReturnedNoRows)),
@@ -148,10 +165,10 @@ mod tests {
     fn special_characters_are_stored_unchanged() {
         let conn = memory_db();
         let special_name = "x'); DROP TABLE files; --";
-        let id = insert_file(&conn, special_name, "0,0").unwrap();
-        let (name, _) = get_file_by_id(&conn, id).unwrap();
-        assert_eq!(name, special_name);
-        let id2 = insert_file(&conn, "test_file2.txt", "1,1").unwrap();
+        let id = insert_file(&conn, special_name, 0.0, 1.1).unwrap();
+        let (file_name, _, _) = get_file_by_id(&conn, id).unwrap();
+        assert_eq!(file_name, special_name);
+        let id2 = insert_file(&conn, "test_file2.txt", 2.2, 3.3).unwrap();
         assert_eq!(id2, id + 1);
     }
 
@@ -163,21 +180,22 @@ mod tests {
         }
         init_database(&path).unwrap();
         let conn = open_admin(&path).unwrap();
-        let id = insert_file(&conn, "test_file.txt", "0,0").unwrap();
+        let id = insert_file(&conn, "test_file.txt", 0.0, 1.1).unwrap();
         drop(conn);
         init_database(&path).unwrap();
         let conn = open_admin(&path).unwrap();
-        let (name, coordinates) = get_file_by_id(&conn, id).unwrap();
-        assert_eq!(name, "test_file.txt");
-        assert_eq!(coordinates, "0,0");
+        let (file_name, latitude, longitude) = get_file_by_id(&conn, id).unwrap();
+        assert_eq!(file_name, "test_file.txt");
+        assert_eq!(latitude, 0.0);
+        assert_eq!(longitude, 1.1);
         std::fs::remove_file(path).unwrap();
     }
 
     #[test]
     fn delete_removes_only_the_given_entry() {
         let conn = memory_db();
-        let id1 = insert_file(&conn, "test_file1.txt", "0,0").unwrap();
-        let id2 = insert_file(&conn, "test_file2.txt", "1,1").unwrap();
+        let id1 = insert_file(&conn, "test_file1.txt", 0.0, 1.1).unwrap();
+        let id2 = insert_file(&conn, "test_file2.txt", 2.2, 3.3).unwrap();
         assert!(delete_file(&conn, id1).unwrap());
         let result1 = get_file_by_id(&conn, id1);
         assert!(
@@ -215,17 +233,82 @@ mod tests {
         }
         init_database(&path).unwrap();
         let conn = open_admin(&path).unwrap();
-        let id = insert_file(&conn, "file.txt", "1.2").unwrap();
+        let id = insert_file(&conn, "file.txt", 0.0, 1.1).unwrap();
         drop(conn);
         let conn = open_read_only(&path).unwrap();
-        let (name, coordinates) = get_file_by_id(&conn, id).unwrap();
-        assert_eq!(name, "file.txt");
-        assert_eq!(coordinates, "1.2");
-        let insert_result = insert_file(&conn, "new_file.txt", "1.0");
+        let (file_name, latitude, longitude) = get_file_by_id(&conn, id).unwrap();
+        assert_eq!(file_name, "file.txt");
+        assert_eq!(latitude,0.0);
+        assert_eq!(longitude, 1.1);
+        let insert_result = insert_file(&conn, "new_file.txt", 2.2, 3.3);       
         assert!(insert_result.is_err());
         let delete_result = delete_file(&conn, id);
         assert!(delete_result.is_err());
         drop(conn);
         std::fs::remove_file(&path).unwrap();
+    }
+    #[test]
+    fn schema_accepts_valid_rows() {
+        let conn = memory_db();
+        let result = try_insert(&conn, "a.jpg", 1.23, 4.56);
+        assert!(
+            result.is_ok(),
+            "normaler Eintrag erwartet, {:?} bekommen",
+            result
+        );
+        let result_ne = try_insert(&conn, "b.jpg", 90.0, 180.0);
+        assert!(
+            result_ne.is_ok(),
+            "Wert zwischen 90/180 erwartet, {:?} bekommen",
+            result_ne
+        );
+        let result_sw = try_insert(&conn, "c.jpg", -90.0, -180.0);
+        assert!(
+            result_sw.is_ok(),
+            "Wert zwischen -90/-180 erwartet, {:?} bekommen",
+            result_sw
+        );
+    }
+
+    #[test]
+    fn schema_rejects_out_of_range_coordinates() {
+        let conn = memory_db();
+        let cases = [
+            ("Breite 90.0001", 90.0001, 0.0),
+            ("Breite -90.0001", -90.0001, 0.0),
+            ("Länge 180.0001", 0.0, 180.0001),
+            ("Länge -180.0001", 0.0, -180.0001),
+        ];
+        for (index, (label, latitude, longitude)) in cases.iter().enumerate() {
+            let file_name = format!("bad_{index}.jpg");
+            let result = try_insert(&conn, &file_name, *latitude, *longitude);
+            assert!(
+                is_constraint_violation(&result),
+                "erwartet: ConstraintViolation bei {label}, erhalten: {:?}",
+                result
+            );
+        }
+    }
+    #[test]
+    fn schema_rejects_duplicate_file_name() {
+        let conn = memory_db();
+        let first_insert = try_insert(&conn, "dup.jpg", 1.2, 3.4);
+        assert!(
+            first_insert.is_ok(),
+            "erwartet: erster Insert ok, erhalten: {:?}",
+            first_insert
+        );
+        let second_insert = try_insert(&conn, "dup.jpg", 5.6, 7.8);
+        assert!(
+            is_constraint_violation(&second_insert),
+            "erwartet: ConstraintViolation wegen doppeltem Namen, erhalten: {:?}",
+            second_insert
+        );
+        let third_insert = try_insert(&conn, "other.jpg", 1.2, 3.4);
+        assert!(
+            third_insert.is_ok(),
+            "erwartet: gleicher Ort mit anderem Namen ok, erhalten: {:?}",
+            third_insert
+        );
     }
 }
