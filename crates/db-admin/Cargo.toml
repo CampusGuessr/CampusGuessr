@@ -1,0 +1,8 @@
+[package]
+name = "db-admin"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rusqlite = { workspace = true }
+campusguessr_db = { path = "../campusguessr_db" }
