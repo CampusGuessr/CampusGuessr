@@ -5,3 +5,7 @@ edition = "2024"
 
 [dependencies]
 fastrand = "2.5.0"
+
+[[bin]]
+name = "server"
+path = "server/src/main.rs"
