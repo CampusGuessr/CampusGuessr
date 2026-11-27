@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 rusqlite = { workspace = true }
+campus_db = { path = "../database" }
