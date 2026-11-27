@@ -1,6 +1,14 @@
 use rusqlite::{Connection, Result, Row, params};
 use std::path::Path;
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct FileEntry {
+    pub id: i64,
+    pub file_name: String,
+    pub latitude: f64,
+    pub longitude: f64,
+}
+
 pub fn create_table(conn: &Connection) -> Result<()> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS files (
@@ -28,7 +36,12 @@ pub fn init_database(path: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn insert_file(conn: &Connection, file_name: &str, latitude: f64, longitude: f64) -> Result<i64> {
+pub fn insert_file(
+    conn: &Connection,
+    file_name: &str,
+    latitude: f64,
+    longitude: f64,
+) -> Result<i64> {
     conn.execute(
         "INSERT INTO files (file_name, latitude, longitude) VALUES (?1, ?2, ?3)",
         params![file_name, latitude, longitude],
@@ -37,7 +50,8 @@ pub fn insert_file(conn: &Connection, file_name: &str, latitude: f64, longitude:
 }
 
 pub fn get_file_by_id(conn: &Connection, id: i64) -> Result<(String, f64, f64)> {
-    let mut stmt = conn.prepare("SELECT file_name, latitude, longitude FROM files WHERE id = ?1")?;
+    let mut stmt =
+        conn.prepare("SELECT file_name, latitude, longitude FROM files WHERE id = ?1")?;
     stmt.query_row(params![id], |row: &Row| {
         let file_name: String = row.get(0)?;
         let latitude: f64 = row.get(1)?;
@@ -54,6 +68,23 @@ pub fn delete_file(conn: &Connection, id: i64) -> Result<bool> {
 pub fn open_read_only(path: &Path) -> Result<Connection> {
     let conn = Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
     Ok(conn)
+}
+pub fn load_all(conn: &Connection) -> Result<Vec<FileEntry>> {
+    let mut stmt =
+        conn.prepare("SELECT id, file_name, latitude, longitude FROM files ORDER BY id")?;
+    let rows = stmt.query_map([], |row| {
+        Ok(FileEntry {
+            id: row.get(0)?,
+            file_name: row.get(1)?,
+            latitude: row.get(2)?,
+            longitude: row.get(3)?,
+        })
+    })?;
+    let mut entries = Vec::new();
+    for row in rows {
+        entries.push(row?);
+    }
+    Ok(entries)
 }
 
 #[cfg(test)]
@@ -134,7 +165,7 @@ mod tests {
     #[test]
     fn insert_returns_new_id() {
         let conn = memory_db();
-        let new_id1 = insert_file(&conn, "test_file.txt",  0.0,  1.1).unwrap();
+        let new_id1 = insert_file(&conn, "test_file.txt", 0.0, 1.1).unwrap();
         assert_eq!(new_id1, 1);
         let new_id2 = insert_file(&conn, "test_file2.txt", 2.2, 3.3).unwrap();
         assert_eq!(new_id2, 2);
@@ -142,7 +173,7 @@ mod tests {
     #[test]
     fn insert_and_read_back() {
         let conn = memory_db();
-        let id = insert_file(&conn, "test.txt",0.0, 1.1).unwrap();
+        let id = insert_file(&conn, "test.txt", 0.0, 1.1).unwrap();
         let (file_name, latitude, longitude) = get_file_by_id(&conn, id).unwrap();
         assert_eq!(file_name, "test.txt");
         assert_eq!(latitude, 0.0);
@@ -238,9 +269,9 @@ mod tests {
         let conn = open_read_only(&path).unwrap();
         let (file_name, latitude, longitude) = get_file_by_id(&conn, id).unwrap();
         assert_eq!(file_name, "file.txt");
-        assert_eq!(latitude,0.0);
+        assert_eq!(latitude, 0.0);
         assert_eq!(longitude, 1.1);
-        let insert_result = insert_file(&conn, "new_file.txt", 2.2, 3.3);       
+        let insert_result = insert_file(&conn, "new_file.txt", 2.2, 3.3);
         assert!(insert_result.is_err());
         let delete_result = delete_file(&conn, id);
         assert!(delete_result.is_err());
@@ -310,5 +341,41 @@ mod tests {
             "erwartet: gleicher Ort mit anderem Namen ok, erhalten: {:?}",
             third_insert
         );
+    }
+    #[test]
+    fn load_all_returns_empty_list_for_empty_table() {
+        let conn = memory_db();
+        let entries = load_all(&conn).unwrap();
+        assert!(
+            entries.is_empty(),
+            "leere Liste erwartet, Liste mit {} erhalten",
+            entries.len()
+        )
+    }
+    #[test]
+    fn load_all_returns_all_entries_in_id_order() {
+        let conn = memory_db();
+        let id1 = insert_file(&conn, "a.jpg", 0.0, 1.1).unwrap();
+        let id2 = insert_file(&conn, "b.jpg", 2.2, 3.3).unwrap();
+        let entries = load_all(&conn).unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(
+            entries[0],
+            FileEntry {
+                id: id1,
+                file_name: "a.jpg".to_string(),
+                latitude: 0.0,
+                longitude: 1.1
+            }
+        );
+        assert_eq!(
+            entries[1],
+            FileEntry {
+                id: id2,
+                file_name: "b.jpg".to_string(),
+                latitude: 2.2,
+                longitude: 3.3
+            }
+        )
     }
 }
