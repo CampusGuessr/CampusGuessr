@@ -1,4 +1,4 @@
-use campus_db::{init_database, insert_file, load_all, open_admin, open_read_only};
+use campusguessr_db::{init_database, insert_file, load_all, open_admin, open_read_only};
 use std::path::Path;
 
 const DB_PATH: &str = "campusguessr.db";

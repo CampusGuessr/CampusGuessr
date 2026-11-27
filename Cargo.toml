@@ -7,7 +7,7 @@ edition = "2024"
 rusqlite = { workspace = true }
 
 [workspace]
-members = ["crates/database", "crates/db-admin"]
+members = ["crates/campusguessr_db", "crates/db-admin"]
 
 [workspace.dependencies]
 rusqlite = { version = "0.43.0", features = ["bundled"] }
